@@ -28,6 +28,7 @@ Let's say we have ticket file named `0004000000DEAD00.tik`, user may run tool li
 
 If the user wants to add a proxy to the connection, they may add the argument `-p URI` or `--proxy URI`
 >ctrcdnfetch --proxy https://example.org 0004000000DEAD00.tik
+
 *run `ctrcdnfetch --help` for proxy examples*
 
 Building from source
