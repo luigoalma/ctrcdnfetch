@@ -1,0 +1,20 @@
+#everything.
+*
+*/
+
+#except sources..
+!*.cpp
+!*.hpp
+!*.h
+!Makefile
+
+#and bin folder...
+!bin/.gitkeep
+
+#also itself....
+!.gitignore
+
+#other stuff too.....
+!README.md
+!LICENSE
+!TODO.md
