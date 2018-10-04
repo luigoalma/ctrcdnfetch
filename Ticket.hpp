@@ -42,8 +42,10 @@ namespace NintendoData {
 			u8 Limits[0x40];
 			u8 ContentIndex[0xAC];
 			u64 GetTicketID() const noexcept {return Endian::Be(TicketID);}
+			u32 GetConsoleID() const noexcept {return Endian::Be(ConsoleID);}
 			u64 GetTitleID() const noexcept {return Endian::Be(TitleID);}
 			u16 GetTicketTitleVersion() const noexcept {return Endian::Be(TicketTitleVersion);}
+			u32 GeteShopID() const noexcept {return Endian::Be(eShopID);}
 		};
 	private:
 		u8* rawticket;
