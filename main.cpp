@@ -4,6 +4,7 @@
 #include <vector>
 #include <exception>
 #include <stdexcept>
+#include <new>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <openssl/sha.h>

@@ -1,6 +1,7 @@
 #include <cstdlib>
 #include <exception>
 #include <stdexcept>
+#include <new>
 #include <openssl/evp.h>
 #include "Base64.hpp"
 

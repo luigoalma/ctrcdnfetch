@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <exception>
 #include <stdexcept>
+#include <new>
 #include <openssl/ssl.h>
 #include <openssl/rsa.h>
 #include <openssl/sha.h>

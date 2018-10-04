@@ -5,6 +5,7 @@
 #include <cstring>
 #include <exception>
 #include <stdexcept>
+#include <new>
 #include <mutex>
 #include "DownloadManager.hpp"
 
