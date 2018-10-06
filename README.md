@@ -9,6 +9,13 @@ So be aware the servers will have hold of your ticket everytime you send it, and
 
 *This tool is not required for system titles. Any other tool can access those titles without a ticket, they can't add checks to these titles since it would break system updates for older versions.*
 
+Notice
+------
+
+Just for the record, **I didn't create this tool to condone piracy**, but it is inevitable and I know someone will use it for such purposes.\
+Regardless, the way you use this tool is entirely your responsibility.\
+Please respect and support the developers of games, DLC, themes, and other content you use by purchasing it.
+
 License
 -------
 
@@ -37,7 +44,6 @@ Building from source
 ### Requirements:
 
 + C++11 Compatible compiler (I recommend [GCC](https://www.gnu.org/software/gcc))
-+ [Binutils](https://www.gnu.org/software/binutils)
 + [Openssl v1.1+](https://www.openssl.org)
 + [libcurl v7.55+](https://curl.haxx.se)
 
