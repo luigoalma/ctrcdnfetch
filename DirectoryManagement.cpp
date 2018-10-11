@@ -18,7 +18,7 @@
 #define DELIMITORS "/"
 #endif
 
-int Utils::DirectoryManagement::CreateDirectory(const char* path, bool recursive) {
+int Utils::DirectoryManagement::MakeDirectory(const char* path, bool recursive) {
 	if(!path) {
 		errno = EFAULT;
 		return errno;
@@ -112,14 +112,30 @@ int Utils::DirectoryManagement::DirectoryListing(DirFileList& output, const char
 			errno = ENOMEM;
 			break;
 		}
-		size_t length = strnlen(ep->d_name, sizeof(ep->d_name)) + 1;
+		size_t length = strlen(ep->d_name) + 1;
 		stuff->name = (char*)calloc(length, 1);
+		strcpy(stuff->name, ep->d_name);
 		if(!stuff->name) {
 			delete stuff;
 			errno = ENOMEM;
 			break;
 		}
-		stuff->type = (ep->d_type == DT_DIR ? 0 : (ep->d_type == DT_REG ? 1 : 2));
+		try {
+			std::string pathcheck(path);
+			#if (defined _WIN16 || defined _WIN32 || defined _WIN64) && !defined __CYGWIN__
+			if(pathcheck.back() != '\\' || pathcheck.back() != '/')
+			#else
+			if(pathcheck.back() != '/')
+			#endif
+				pathcheck += '/';
+			pathcheck += stuff->name;
+			if(stat(pathcheck.c_str(), &buffer) != 0) break;
+		} catch (...) {
+			delete stuff;
+			errno = ENOMEM;
+			break;
+		}
+		stuff->type = ((buffer.st_mode&S_IFMT) == S_IFDIR ? 0 : ((buffer.st_mode&S_IFMT) == S_IFREG ? 1 : 2));
 		try {
 			output.entries.push_back(stuff);
 		} catch (...) {
@@ -129,6 +145,7 @@ int Utils::DirectoryManagement::DirectoryListing(DirFileList& output, const char
 		}
 	}
 	if(errno) output.Clear();
+	closedir(dp);
 	return errno;
 }
 

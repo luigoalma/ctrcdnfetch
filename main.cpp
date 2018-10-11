@@ -92,7 +92,7 @@ static void loadcerts(u8*& ptr, const char* proxy) {
 			std::string path("");
 			path += home;
 			path += "/.3ds";
-			if(Utils::DirectoryManagement::CreateDirectory(path.c_str()))
+			if(Utils::DirectoryManagement::MakeDirectory(path.c_str()))
 				throw std::runtime_error("Failed to create directory");
 			firstgooddir = path;
 		}
@@ -351,7 +351,7 @@ int main(int argc, char** argv) {
 			outpath = (char*)calloc(len+1, 1);
 			if(!outpath) throw std::bad_alloc();
 			snprintf(outpath, len+1, "%016llX", (unsigned long long)cdnaccess.GetTitleId());
-			if(Utils::DirectoryManagement::CreateDirectory(outpath))
+			if(Utils::DirectoryManagement::MakeDirectory(outpath))
 				throw std::runtime_error("Failed to create directory");
 			cdnaccess.Download(outpath);
 			snprintf(outpath, len+1, "%016llX/cetk", (unsigned long long)cdnaccess.GetTitleId());

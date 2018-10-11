@@ -57,7 +57,7 @@ namespace Utils {
 			friend int DirectoryListing(DirFileList& output, const char* path) noexcept;
 		};
 
-		int CreateDirectory(const char* path, bool recursive = true);
+		int MakeDirectory(const char* path, bool recursive = true);
 		int DirectoryListing(DirFileList& output, const char* path) noexcept;
 		int CheckIfDir(const char* path) noexcept;
 	}
