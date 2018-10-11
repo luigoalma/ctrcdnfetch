@@ -4,6 +4,7 @@
 #include <cstring>
 #include <exception>
 #include <stdexcept>
+#include <new>
 #include "Endian.hpp"
 #include "types.h"
 
@@ -52,18 +53,24 @@ namespace NintendoData {
 		struct Header* header;
 	public:
 		Ticket& operator=(const Ticket& other) {
-			size_t ticketlen = ((uptr)other.header - (uptr)other.rawticket) + sizeof(struct Header);
-			u8* tmp = (u8*)calloc(ticketlen, 1);
-			if(!tmp) throw std::bad_alloc();
-			free(this->rawticket);
-			this->rawticket = tmp;
-			memcpy(this->rawticket, other.rawticket, ticketlen);
-			this->header = (struct Header*)&this->rawticket[(uptr)other.header - (uptr)other.rawticket];
+			if(this != &other) {
+				size_t ticketlen = ((uptr)other.header - (uptr)other.rawticket) + sizeof(struct Header);
+				u8* tmp = (u8*)calloc(ticketlen, 1);
+				if(!tmp) throw std::bad_alloc();
+				free(this->rawticket);
+				this->rawticket = tmp;
+				memcpy(this->rawticket, other.rawticket, ticketlen);
+				this->header = (struct Header*)&this->rawticket[(uptr)other.header - (uptr)other.rawticket];
+			}
 			return *this;
 		}
 		void GetWrappedTicket(char*& out_b64_encticket, char*& out_b64_encticketkey) const;
 		const struct Header &GetHeader() const noexcept {return *header;}
+		u64 TicketID() const noexcept {return GetHeader().GetTicketID();}
+		u32 ConsoleID() const noexcept {return GetHeader().GetConsoleID();}
 		u64 TitleID() const noexcept {return GetHeader().GetTitleID();}
+		u16 GetTicketTitleVersion() const noexcept {return GetHeader().GetTicketTitleVersion();}
+		u32 eShopID() const noexcept {return GetHeader().GeteShopID();}
 		bool VerifySign() const;
 		size_t TotalSize() const noexcept {return ((uptr)header - (uptr)rawticket) + sizeof(struct Header);}
 		Ticket(const Ticket& other, bool mustbesigned = false) : rawticket(NULL) {

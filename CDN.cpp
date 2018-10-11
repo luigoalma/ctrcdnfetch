@@ -24,8 +24,8 @@ void NintendoData::CDN::Download(const char* outdir) {
 		u16 tmdcontentcount = tmd.GetContentCount();
 		for(u16 i = 0; i < tmdcontentcount; i++) {
 			u32 id = tmd.ChunkRecord(i).GetContentId();
-			manager.SetAttribute(DownloadManager::FILENAME, "%08X", id)
-				.SetAttribute(DownloadManager::OUTPATH, "%s/%08X", outdir, id)
+			manager.SetAttribute(DownloadManager::FILENAME, "%08x", id)
+				.SetAttribute(DownloadManager::OUTPATH, "%s/%08x", outdir, id)
 				.SetAttribute(DownloadManager::URL, "%s/%016llX/%08X", baseurl, GetTitleId(), id);
 			auto downloader = manager.GetDownloader();
 			if(downloader.Download() != tmd.ChunkRecord(i).GetContentSize())
