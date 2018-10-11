@@ -19,7 +19,7 @@ namespace Utils {
 						name = tmpname;
 						type = other.type;
 					}
-					return *this
+					return *this;
 				}
 				entry() : name(NULL), type(-1) {}
 				entry(entry& other) : entry() {*this = other;}
