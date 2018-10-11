@@ -11,12 +11,15 @@ namespace Utils {
 			public:
 				char* name;
 				int type; //0 folder, 1 file, 2 unknown or special types, -1 no entry.
-				entry operator=(entry& other) {
-					char* tmpname = (char*)calloc(strlen(other.name)+1, 1);
-					if(!tmpname) throw std::bad_alloc();
-					free(name);
-					name = tmpname;
-					type = other.type;
+				entry& operator=(entry& other) {
+					if(this == &other) {
+						char* tmpname = (char*)calloc(strlen(other.name)+1, 1);
+						if(!tmpname) throw std::bad_alloc();
+						free(name);
+						name = tmpname;
+						type = other.type;
+					}
+					return *this
 				}
 				entry() : name(NULL), type(-1) {}
 				entry(entry& other) : entry() {*this = other;}
