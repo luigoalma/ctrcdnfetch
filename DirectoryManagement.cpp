@@ -1,5 +1,7 @@
 #define _DEFAULT_SOURCE
+#ifndef _FILE_OFFSET_BITS
 #define _FILE_OFFSET_BITS 64
+#endif
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -10,7 +12,7 @@
 #include <dirent.h>
 #include "DirectoryManagement.hpp"
 
-#if (defined _WIN16 || defined _WIN32 || defined _WIN64) && !defined __CYGWIN__
+#if defined _WIN16 || defined _WIN32 || defined _WIN64
 #define goodmkdir(x,y) mkdir(x)
 #define DELIMITORS "/\\"
 #else
@@ -107,6 +109,7 @@ int Utils::DirectoryManagement::DirectoryListing(DirFileList& output, const char
 	output.Clear();
 	errno = 0; //ensure
 	while ((ep = readdir(dp))) {
+		if(!strcmp(ep->d_name, ".") || !strcmp(ep->d_name, "..")) continue;
 		DirFileList::entry* stuff = new(std::nothrow) DirFileList::entry();
 		if(!stuff) {
 			errno = ENOMEM;
@@ -114,12 +117,12 @@ int Utils::DirectoryManagement::DirectoryListing(DirFileList& output, const char
 		}
 		size_t length = strlen(ep->d_name) + 1;
 		stuff->name = (char*)calloc(length, 1);
-		strcpy(stuff->name, ep->d_name);
 		if(!stuff->name) {
 			delete stuff;
 			errno = ENOMEM;
 			break;
 		}
+		strcpy(stuff->name, ep->d_name);
 		try {
 			std::string pathcheck(path);
 			#if (defined _WIN16 || defined _WIN32 || defined _WIN64) && !defined __CYGWIN__
@@ -158,9 +161,8 @@ int Utils::DirectoryManagement::CheckIfDir(const char* path) noexcept {
 	memset(&buffer, 0, sizeof(struct stat));
 	errno = 0;
 	if(stat(path, &buffer) != 0) return errno;
-	if((buffer.st_mode&S_IFMT) != S_IFDIR) {
+	if((buffer.st_mode&S_IFMT) != S_IFDIR)
 		errno = ENOTDIR;
-	}
 	return errno;
 }
 

@@ -1,3 +1,5 @@
+#ifndef __DIRECTORYMANAGEMENT_HPP__
+#define __DIRECTORYMANAGEMENT_HPP__
 #include <exception>
 #include <stdexcept>
 #include <new>
@@ -65,3 +67,5 @@ namespace Utils {
 		int CheckIfDir(const char* path) noexcept;
 	}
 }
+
+#endif
