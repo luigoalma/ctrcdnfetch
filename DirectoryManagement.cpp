@@ -30,7 +30,9 @@ int Utils::DirectoryManagement::MakeDirectory(const char* path, bool recursive) 
 	errno = 0;
 	if(stat(path, &buffer) == 0) {
 		if((buffer.st_mode&S_IFMT) != S_IFDIR) errno = ENOTDIR;
-	} else if(recursive) {
+		if(!errno) return 0;
+	}
+	if(recursive) {
 		char* copypath = (char*)calloc(strlen(path)+1, 1);
 		if(!copypath) {
 			errno = ENOMEM;

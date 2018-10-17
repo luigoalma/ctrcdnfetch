@@ -174,8 +174,8 @@ int NintendoData::SharedStorage::Save(const void* in, size_t inlen, const char* 
 				return errno;
 			}
 			dirpath = tmp;
-			strcat(dirpath, part2);
 			strcat(dirpath, "/");
+			strcat(dirpath, part2);
 		}
 		part2 = part1;
 	}
@@ -186,7 +186,7 @@ int NintendoData::SharedStorage::Save(const void* in, size_t inlen, const char* 
 		errno = err;
 		return errno;
 	}
-	size_t length = snprintf(NULL, 0, "%s/%s", storagepath, dirpath) + 1;
+	size_t length = snprintf(NULL, 0, "%s%s", storagepath, dirpath) + 1;
 	char* fullpath = (char*)calloc(length, 1);
 	if(!fullpath) {
 		free(storagepath);
@@ -194,7 +194,7 @@ int NintendoData::SharedStorage::Save(const void* in, size_t inlen, const char* 
 		errno = ENOMEM;
 		return errno;
 	}
-	snprintf(fullpath, length, "%s/%s", storagepath, dirpath);
+	snprintf(fullpath, length, "%s%s", storagepath, dirpath);
 	free(dirpath);
 	err = Utils::DirectoryManagement::MakeDirectory(fullpath);
 	free(fullpath);
