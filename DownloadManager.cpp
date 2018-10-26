@@ -52,7 +52,26 @@ size_t DownloadManager::Downloader::write_data(void *ptr, size_t size, size_t nm
 	return 0; //this shouldn't happen?? but to suppress warnings and to be sure..
 }
 
-DownloadManager::Downloader::Downloader(DownloadManager& data) : outpath(NULL), curl_handle(NULL), chunk(NULL), progress({}), buffer_data({}), res((CURLcode)~CURLE_OK) {
+size_t DownloadManager::Downloader::headerprint(void *ptr, size_t size, size_t nmemb, void *data) noexcept {
+	Downloader* _this = (Downloader*)data;
+	size_t realsize = size*nmemb;
+	size_t foobar = _this->header_data.size + realsize;
+	if(_this->header_data.size != foobar){ //incase this function is called when realsize = 0
+		u8* foo = (u8*)realloc(_this->header_data.buffer, foobar);
+		if(foo) {
+			_this->header_data.buffer = foo;
+			memcpy((void*)(&((char*)_this->header_data.buffer)[_this->header_data.size]), ptr, realsize);
+			_this->header_data.size = foobar;
+			return realsize;
+		} else {
+			free(_this->header_data.buffer);
+			_this->header_data.buffer = NULL;
+			return 0; //abort
+		}
+	} else return 0;
+}
+
+DownloadManager::Downloader::Downloader(DownloadManager& data) : outpath(NULL), curl_handle(NULL), chunk(NULL), progress({}), buffer_data({}), header_data({}), res((CURLcode)~CURLE_OK) {
 	data.lock();
 	outpath = data.outpath;
 	FILE* out = !outpath ? NULL : fopen(outpath, "wb");
@@ -60,7 +79,7 @@ DownloadManager::Downloader::Downloader(DownloadManager& data) : outpath(NULL), 
 		data.unlock();
 		throw std::bad_alloc();
 	}
-	if(!out && !data.bufferflag) {
+	if(!out && !data.bufferflag && !data.printheaders) {
 		data.unlock();
 		throw std::runtime_error("No download location or buffer set.");
 	}
@@ -79,6 +98,7 @@ DownloadManager::Downloader::Downloader(DownloadManager& data) : outpath(NULL), 
 	}
 	function = !data.function ? &xferinfo : data.function;
 	bufferflag = data.bufferflag;
+	printheaders = data.printheaders;
 	progress.filename = data.filename;
 	progress.extradata = data.extraprogressdata;
 	bool immediate = data.immediate;
@@ -92,6 +112,11 @@ DownloadManager::Downloader::Downloader(DownloadManager& data) : outpath(NULL), 
 
 	curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, write_data);
 	curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, this);
+
+	if(printheaders) {
+		curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, headerprint);
+		curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, this);
+	}
 
 	curl_easy_setopt(curl_handle, CURLOPT_XFERINFOFUNCTION, function);
 	curl_easy_setopt(curl_handle, CURLOPT_XFERINFODATA, &this->progress);
@@ -112,14 +137,35 @@ u64 DownloadManager::Downloader::Download() noexcept {
 	if(outpath && !out) {
 		return 0;
 	}
+	if(!out && !bufferflag) {
+		if(!printheaders) return 0;
+		curl_easy_setopt(curl_handle, CURLOPT_NOBODY, 1L);
+	}
 	res = curl_easy_perform(curl_handle);
 	if(out) fclose(out);
 	if(res != CURLE_OK) {
 		if(outpath) remove(outpath);
 		free(buffer_data.buffer);
+		free(header_data.buffer);
 		buffer_data.buffer = NULL;
 		buffer_data.size = 0;
+		header_data.buffer = NULL;
+		header_data.size = 0;
 		return 0;
+	}
+	if(printheaders) {
+		if(!header_data.buffer) {
+			if(outpath) remove(outpath);
+			free(buffer_data.buffer);
+			buffer_data.buffer = NULL;
+			buffer_data.size = 0;
+			return 0;
+		}
+		fwrite(header_data.buffer, header_data.size, 1, stdout);
+		fflush(stdout);
+		free(header_data.buffer);
+		header_data.buffer = NULL;
+		header_data.size = 0;
 	}
 	curl_off_t dl = 0;
 	curl_easy_getinfo(curl_handle, CURLINFO_SIZE_DOWNLOAD_T, &dl);
@@ -196,6 +242,9 @@ DownloadManager& DownloadManager::SetAttribute(DownloadManager::Flagtype type, b
 	case IMMEDIATE:
 		immediate = flag;
 		break;
+	case PRINTHEADER:
+		printheaders = flag;
+		break;
 	}
 	unlock();
 	return *this;
@@ -215,7 +264,7 @@ DownloadManager& DownloadManager::SetAttribute(void* extra) noexcept {
 	return *this;
 }
 
-DownloadManager::DownloadManager() : filename(NULL), outpath(NULL), chunk(NULL), function(NULL), extraprogressdata(NULL), bufferflag(false), immediate(false) {
+DownloadManager::DownloadManager() : filename(NULL), outpath(NULL), chunk(NULL), function(NULL), extraprogressdata(NULL), bufferflag(false), printheaders(false), immediate(false) {
 	if(InitLib() != CURLE_OK) throw std::runtime_error("Couldn't init libcurl or an instance of it.");
 	#ifndef CURL_STATICLIB
 	static bool versionchecked = false;

@@ -12,10 +12,10 @@ void NintendoData::CDN::Download(const char* outdir) {
 		.SetAttribute(DownloadManager::HEADER, "X-Authentication-Data: %s", b64_encticket);
 	try {
 		manager.SetAttribute(DownloadManager::FILENAME, "tmd")
-			.SetAttribute(DownloadManager::OUTPATH, "%s/tmd", outdir)
 			.SetAttribute(DownloadManager::URL, "%s/%016llX/tmd", baseurl, GetTitleId())
 			.SetAttribute(DownloadManager::BUFFER, true)
 			.SetAttribute(DownloadManager::PROGRESS, true);
+		if(!nodownload) manager.SetAttribute(DownloadManager::OUTPATH, "%s/tmd", outdir);
 		auto tmddownloader = manager.GetDownloader();
 		if(!tmddownloader.Download()) throw std::runtime_error("Failed to download TMD");
 		tmdbuffer = (u8*)tmddownloader.GetBufferAndDetach(tmdlen);
@@ -24,11 +24,12 @@ void NintendoData::CDN::Download(const char* outdir) {
 		u16 tmdcontentcount = tmd.GetContentCount();
 		for(u16 i = 0; i < tmdcontentcount; i++) {
 			u32 id = tmd.ChunkRecord(i).GetContentId();
+			if(nodownload) printf("%08x\n", id);
 			manager.SetAttribute(DownloadManager::FILENAME, "%08x", id)
-				.SetAttribute(DownloadManager::OUTPATH, "%s/%08x", outdir, id)
 				.SetAttribute(DownloadManager::URL, "%s/%016llX/%08X", baseurl, GetTitleId(), id);
+			if(!nodownload) manager.SetAttribute(DownloadManager::OUTPATH, "%s/%08x", outdir, id);
 			auto downloader = manager.GetDownloader();
-			if(downloader.Download() != tmd.ChunkRecord(i).GetContentSize())
+			if(downloader.Download() != tmd.ChunkRecord(i).GetContentSize() && !nodownload)
 				throw std::runtime_error("Failed to download content or content size is invalid.");
 		}
 	} catch (...) {

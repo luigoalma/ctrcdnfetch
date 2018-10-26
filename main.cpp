@@ -83,6 +83,8 @@ struct arguments {
 	std::vector<const char*> files;
 	bool printhelp = false;
 	bool useforcetkregardless = false;
+	bool printresponseheaders = false;
+	bool nodownload = false;
 };
 
 //not that much.. yet 
@@ -94,6 +96,8 @@ static void print_usage(const char* ptr) {
 		"                      Regardless they are eshop ones or not.\n"
 		"                      This makes CIAs not installable but\n"
 		"                      keeps original ticket on them.\n"
+		"  -r, --response      Print response headers.\n"
+		"  -n, --no-download   Doesn't download, implies -r.\n"
 		"  -h, --help          Show this message.\n"
 		"      --usage         Alias for help.\n"
 		"\nProxy format:\n"
@@ -170,6 +174,13 @@ static void parse_args(struct arguments& args, int argc, char** argv) {
 						}
 						args.proxy = argv[++i];
 						break;
+					case 'r':
+						args.printresponseheaders = true;
+						break;
+					case 'n':
+						args.nodownload = true;
+						args.printresponseheaders = true;
+						break;
 					default:
 						strerr += "Argument ignored: ";
 						strerr += argv[current][j];
@@ -200,6 +211,15 @@ static void parse_args(struct arguments& args, int argc, char** argv) {
 			}
 			if(!strcmp(&argv[i][2], "use-for-cetk")) {
 				args.useforcetkregardless = true;
+				continue;
+			}
+			if(!strcmp(&argv[i][2], "response")) {
+				args.printresponseheaders = true;
+				continue;
+			}
+			if(!strcmp(&argv[i][2], "no-download")) {
+				args.nodownload = true;
+				args.printresponseheaders = true;
 				continue;
 			}
 			if(!strcmp(&argv[i][2], "help") || !strcmp(&argv[i][2], "usage")) {
@@ -282,24 +302,34 @@ int main(int argc, char** argv) {
 			printf("Downloading Title ID %016llX...\n", (unsigned long long)tik.TitleID());
 			NintendoData::CDN cdnaccess(tik);
 			if(args.proxy) cdnaccess.SetProxy(args.proxy);
-			size_t len = snprintf(NULL, 0, "%016llX/cetk", (unsigned long long)cdnaccess.GetTitleId());
-			outpath = (char*)calloc(len+1, 1);
-			if(!outpath) throw std::bad_alloc();
-			snprintf(outpath, len+1, "%016llX", (unsigned long long)cdnaccess.GetTitleId());
-			if(Utils::DirectoryManagement::MakeDirectory(outpath))
-				throw std::runtime_error("Failed to create directory");
-			cdnaccess.Download(outpath);
-			snprintf(outpath, len+1, "%016llX/cetk", (unsigned long long)cdnaccess.GetTitleId());
-			fp = fopen(outpath, "wb");
-			if(!fp) {
-				fprintf(stderr, "Failed to open \"%s\". Skipping...\n", outpath);
-				free(outpath);
-				continue;
+			cdnaccess.SetHeaderPrint(args.printresponseheaders);
+			size_t len = 0;
+			if(!args.nodownload) {
+				len = snprintf(NULL, 0, "%016llX/cetk", (unsigned long long)cdnaccess.GetTitleId());
+				outpath = (char*)calloc(len+1, 1);
+				if(!outpath) throw std::bad_alloc();
+				snprintf(outpath, len+1, "%016llX", (unsigned long long)cdnaccess.GetTitleId());
+				if(Utils::DirectoryManagement::MakeDirectory(outpath))
+					throw std::runtime_error("Failed to create directory");
+			} else {
+				cdnaccess.SetNoDownload(true);
+				outpath = NULL;
 			}
-			fwrite(cetkstart, 1, 848, fp);
-			fwrite(certs, 1, 1792, fp);
-			fclose(fp);
-			free(outpath);
+			cdnaccess.Download(outpath);
+			if(!args.nodownload) {
+				snprintf(outpath, len+1, "%016llX/cetk", (unsigned long long)cdnaccess.GetTitleId());
+				fp = fopen(outpath, "wb");
+				if(!fp) {
+					fprintf(stderr, "Failed to open \"%s\". Skipping...\n", outpath);
+					free(outpath);
+					continue;
+				}
+				fwrite(cetkstart, 1, 848, fp);
+				fwrite(certs, 1, 1792, fp);
+				fclose(fp);
+				free(outpath);
+			}
+			outpath = NULL;
 			processedtids.push_back(cdnaccess.GetTitleId());
 		} catch(std::exception& e) {
 			fflush(stdout);
@@ -307,6 +337,7 @@ int main(int argc, char** argv) {
 				"Skipping \"%s\"...\n"
 				"Caugth exception message: %s\n\n", args.files[i], e.what());
 			free(outpath);
+			outpath = NULL;
 			continue;
 		}
 	}

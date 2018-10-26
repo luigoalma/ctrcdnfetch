@@ -18,7 +18,8 @@ public:
 	enum Flagtype {
 		BUFFER = 0,
 		PROGRESS,
-		IMMEDIATE //start downloading once running GetDownloader
+		IMMEDIATE, //start downloading once running GetDownloader
+		PRINTHEADER
 	};
 	typedef int (*progress_func)(void *p, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow);
 protected:
@@ -29,6 +30,7 @@ protected:
 	progress_func function;
 	void* extraprogressdata;
 	bool bufferflag;
+	bool printheaders;
 	bool immediate;
 public:
 	class Downloader {
@@ -49,11 +51,17 @@ public:
 			void* buffer;
 			size_t size;
 		} buffer_data;
+		struct {
+			void* buffer;
+			size_t size;
+		} header_data;
 		CURLcode res;
 		bool bufferflag;
+		bool printheaders;
 		static int xferinfo(void *p, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow) noexcept;
 		static int older_progress(void *p, double dltotal, double dlnow, double ultotal, double ulnow) noexcept;
-		static size_t write_data(void *ptr, size_t size, size_t nmemb, void *filedata) noexcept;
+		static size_t write_data(void *ptr, size_t size, size_t nmemb, void *data) noexcept;
+		static size_t headerprint(void *ptr, size_t size, size_t nmemb, void *data) noexcept;
 		explicit Downloader(DownloadManager& data);
 	public:
 		~Downloader() noexcept;
@@ -62,6 +70,7 @@ public:
 			void* ptr = buffer_data.buffer;
 			buffer_data.buffer = NULL;
 			length = buffer_data.size;
+			buffer_data.size = 0;
 			return ptr;
 		}
 		bool WasLastAttemptSuccess() noexcept {
