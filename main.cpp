@@ -79,8 +79,13 @@ static void loadcerts(u8*& ptr, const char* proxy) {
 }
 
 struct arguments {
+	struct entry {
+		const char* path = NULL;
+		u16 version = 0;
+		bool latest = true;
+	};
 	const char* proxy = NULL;
-	std::vector<const char*> files;
+	std::vector<struct entry> files;
 	bool printhelp = false;
 	bool useforcetkregardless = false;
 	bool printresponseheaders = false;
@@ -123,6 +128,28 @@ static const char* checkifvalidticket(const char* ptr) {
 	return NULL;
 }
 
+static bool parse_a_title(std::string& strerr, struct arguments& args, int i, char** argv) {
+	const char* reason;
+	if((reason = checkifvalidticket(argv[i])) != NULL) {
+		strerr += "Argument ignored: ";
+		strerr += argv[i];
+		strerr += "\n ";
+		strerr += reason;
+		strerr += "\n";
+		return false;
+	}
+	bool found = false;
+	for(size_t foo = 0; foo < args.files.size(); foo++) 
+		if(!strcmp(argv[i], args.files[foo].path)) {
+			found = true;
+			break;
+		}
+	struct arguments::entry newentry;
+	newentry.path = argv[i];
+	if(!found) args.files.push_back(newentry);
+	return !found;
+}
+
 //Clean? Nope. Works? yup.
 //Enjoy indentation mess.
 static void parse_args(struct arguments& args, int argc, char** argv) {
@@ -131,22 +158,7 @@ static void parse_args(struct arguments& args, int argc, char** argv) {
 		for(int i = 1; i < argc; i++) {
 			if(!*argv[i]) continue; //?? shouldn't happen but I'll leave it in as a fail safe..
 			if(*argv[i] != '-') {
-				const char* reason;
-				if((reason = checkifvalidticket(argv[i])) != NULL) {
-					strerr += "Argument ignored: ";
-					strerr += argv[i];
-					strerr += "\n ";
-					strerr += reason;
-					strerr += "\n";
-					continue;
-				}
-				bool found = false;
-				for(size_t foo = 0; foo < args.files.size(); foo++) 
-					if(!strcmp(argv[i], args.files[foo])) {
-						found = true;
-						break;
-					}
-				if(!found) args.files.push_back(argv[i]);
+				parse_a_title(strerr, args, i, argv);
 				continue;
 			}
 			if(!argv[i][1]) {
@@ -180,6 +192,32 @@ static void parse_args(struct arguments& args, int argc, char** argv) {
 					case 'n':
 						args.nodownload = true;
 						args.printresponseheaders = true;
+						break;
+					case 'v':
+						if(!argv[i + 1] || !argv[i + 2]) {
+							strerr += "Argument ignored: v\n No more arguments.\n";
+							continue;
+						}
+						if(!parse_a_title(strerr, args, i + 2, argv)) {
+							i+=2;
+							strerr += "Argument ignored: v\n Bad ticket path.\n";
+							continue;
+						}
+						{
+							auto version = strtoul(argv[i + 1], NULL, 0);
+							if(version > 0xffff) {
+								args.files.pop_back();
+								strerr += "Argument ignored: v\n Bad Version.\n Won't process:\n ";
+								strerr += argv[i + 2];
+								strerr += "\n";
+								i+=2;
+								continue;
+							}
+							auto index = args.files.size()-1;
+							args.files[index].version = version;
+							args.files[index].latest = false;
+						}
+						i+=2;
 						break;
 					default:
 						strerr += "Argument ignored: ";
@@ -220,6 +258,31 @@ static void parse_args(struct arguments& args, int argc, char** argv) {
 			if(!strcmp(&argv[i][2], "no-download")) {
 				args.nodownload = true;
 				args.printresponseheaders = true;
+				continue;
+			}
+			if(!strcmp(&argv[i][2], "version")) {
+				if(!argv[i + 1] || !argv[i + 2]) {
+					strerr += "Argument ignored: v\n No more arguments.\n";
+					continue;
+				}
+				if(!parse_a_title(strerr, args, i + 2, argv)) {
+					i+=2;
+					strerr += "Argument ignored: v\n Bad ticket path.\n";
+					continue;
+				}
+				auto version = strtoul(argv[i + 1], NULL, 0);
+				if(version > 0xffff) {
+					args.files.pop_back();
+					strerr += "Argument ignored: v\n Bad Version.\n Won't process:\n ";
+					strerr += argv[i + 2];
+					strerr += "\n";
+					i+=2;
+					continue;
+				}
+				auto index = args.files.size()-1;
+				args.files[index].version = version;
+				args.files[index].latest = false;
+				i+=2;
 				continue;
 			}
 			if(!strcmp(&argv[i][2], "help") || !strcmp(&argv[i][2], "usage")) {
@@ -269,14 +332,14 @@ int main(int argc, char** argv) {
 	}
 	for(size_t i = 0; i < args.files.size(); i++) {
 		//this only supports RSA_2048_SHA256 type and Root-CA00000003-XS0000000c issuer tickets.
-		FILE *fp = fopen(args.files[i], "rb");
+		FILE *fp = fopen(args.files[i].path, "rb");
 		if(!fp) {
-			fprintf(stderr, "Failed to open \"%s\". Skipping...\n", args.files[i]);
+			fprintf(stderr, "Failed to open \"%s\". Skipping...\n", args.files[i].path);
 			continue;
 		}
 		auto readtotal = fread(tikbuffer, 1, 848, fp);
 		if(readtotal != 848) {
-			fprintf(stderr, "Failed to read 848 bytes from \"%s\". Skipping...\n", args.files[i]);
+			fprintf(stderr, "Failed to read 848 bytes from \"%s\". Skipping...\n", args.files[i].path);
 			fclose(fp);
 			continue;
 		}
@@ -291,7 +354,7 @@ int main(int argc, char** argv) {
 					break;
 				}
 			if(skip) {
-				printf("Skipping \"%s\", already downloaded title from ticket.\n", args.files[i]);
+				printf("Skipping \"%s\", already downloaded title from ticket.\n", args.files[i].path);
 				continue;
 			}
 			if(!args.useforcetkregardless && (tik.eShopID() || tik.ConsoleID())) {
@@ -315,6 +378,7 @@ int main(int argc, char** argv) {
 				cdnaccess.SetNoDownload(true);
 				outpath = NULL;
 			}
+			if(!args.files[i].latest) cdnaccess.SetVersion(args.files[i].version);
 			cdnaccess.Download(outpath);
 			if(!args.nodownload) {
 				snprintf(outpath, len+1, "%016llX/cetk", (unsigned long long)cdnaccess.GetTitleId());
@@ -335,7 +399,7 @@ int main(int argc, char** argv) {
 			fflush(stdout);
 			fprintf(stderr, "Something prevented the program to download target.\n"
 				"Skipping \"%s\"...\n"
-				"Caugth exception message: %s\n\n", args.files[i], e.what());
+				"Caugth exception message: %s\n\n", args.files[i].path, e.what());
 			free(outpath);
 			outpath = NULL;
 			continue;

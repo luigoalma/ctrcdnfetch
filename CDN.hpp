@@ -9,6 +9,8 @@ namespace NintendoData {
 	private:
 		Ticket tik;
 		::DownloadManager manager;
+		u16 version;
+		bool set_version;
 		bool nodownload;
 	public:
 		template<typename... Args> CDN& SetProxy(const char* str, Args... args) noexcept {
@@ -32,6 +34,11 @@ namespace NintendoData {
 			if(nodownload) SetHeaderPrint(true);
 			return *this;
 		}
+		CDN& SetVersion(u16 version) noexcept {
+			this->version = version;
+			this->set_version = true;
+			return *this;
+		}
 		u64 GetTitleId() const noexcept {return tik.TitleID();}
 		void Download(const char* outdir);
 	private:
@@ -40,8 +47,8 @@ namespace NintendoData {
 				.SetAttribute(DownloadManager::HEADER, "Connection: Keep-Alive");	
 		}
 	public:
-		CDN(const Ticket& ticket) : tik(ticket, true), nodownload(false) {Init();}
-		CDN(const void* ticket, size_t ticketlen) : tik(ticket, ticketlen, true), nodownload(false) {Init();}
+		CDN(const Ticket& ticket) : tik(ticket, true), set_version(false), nodownload(false) {Init();}
+		CDN(const void* ticket, size_t ticketlen) : tik(ticket, ticketlen, true), set_version(false), nodownload(false) {Init();}
 		~CDN() noexcept {}
 	};
 }

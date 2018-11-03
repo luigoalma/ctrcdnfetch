@@ -11,11 +11,17 @@ void NintendoData::CDN::Download(const char* outdir) {
 	manager.SetAttribute(DownloadManager::HEADER, "X-Authentication-Key: %s", b64_encticketkey)
 		.SetAttribute(DownloadManager::HEADER, "X-Authentication-Data: %s", b64_encticket);
 	try {
-		manager.SetAttribute(DownloadManager::FILENAME, "tmd")
-			.SetAttribute(DownloadManager::URL, "%s/%016llX/tmd", baseurl, GetTitleId())
-			.SetAttribute(DownloadManager::BUFFER, true)
+		manager.SetAttribute(DownloadManager::BUFFER, true)
 			.SetAttribute(DownloadManager::PROGRESS, true);
-		if(!nodownload) manager.SetAttribute(DownloadManager::OUTPATH, "%s/tmd", outdir);
+		if(set_version) {
+			manager.SetAttribute(DownloadManager::FILENAME, "tmd.%d", version)
+				.SetAttribute(DownloadManager::URL, "%s/%016llX/tmd.%d", baseurl, GetTitleId(), version);
+			if(!nodownload) manager.SetAttribute(DownloadManager::OUTPATH, "%s/tmd.%d", outdir, version);
+		} else {
+			manager.SetAttribute(DownloadManager::FILENAME, "tmd")
+				.SetAttribute(DownloadManager::URL, "%s/%016llX/tmd", baseurl, GetTitleId());
+			if(!nodownload) manager.SetAttribute(DownloadManager::OUTPATH, "%s/tmd", outdir);
+		}
 		auto tmddownloader = manager.GetDownloader();
 		if(!tmddownloader.Download()) throw std::runtime_error("Failed to download TMD");
 		tmdbuffer = (u8*)tmddownloader.GetBufferAndDetach(tmdlen);

@@ -34,16 +34,15 @@ size_t DownloadManager::Downloader::write_data(void *ptr, size_t size, size_t nm
 		size_t foobar = _this->buffer_data.size + realsize;
 		if(_this->buffer_data.size != foobar){ //incase this function is called when realsize = 0
 			u8* foo = (u8*)realloc(_this->buffer_data.buffer, foobar);
-			if(foo) {
-				_this->buffer_data.buffer = foo;
-				memcpy((void*)(&((char*)_this->buffer_data.buffer)[_this->buffer_data.size]), ptr, realsize);
-				_this->buffer_data.size = foobar;
-				if(!_this->out) return realsize; //if no file, return now, to continue with download to buffer
-			} else {
+			if(!foo) {
 				free(_this->buffer_data.buffer);
 				_this->buffer_data.buffer = NULL;
 				return 0; //abort
 			}
+			_this->buffer_data.buffer = foo;
+			memcpy((void*)(&((char*)_this->buffer_data.buffer)[_this->buffer_data.size]), ptr, realsize);
+			_this->buffer_data.size = foobar;
+			if(!_this->out) return realsize; //if no file, return now, to continue with download to buffer
 		}
 	}
 	if(_this->out) {
@@ -56,19 +55,18 @@ size_t DownloadManager::Downloader::headerprint(void *ptr, size_t size, size_t n
 	Downloader* _this = (Downloader*)data;
 	size_t realsize = size*nmemb;
 	size_t foobar = _this->header_data.size + realsize;
-	if(_this->header_data.size != foobar){ //incase this function is called when realsize = 0
-		u8* foo = (u8*)realloc(_this->header_data.buffer, foobar);
-		if(foo) {
-			_this->header_data.buffer = foo;
-			memcpy((void*)(&((char*)_this->header_data.buffer)[_this->header_data.size]), ptr, realsize);
-			_this->header_data.size = foobar;
-			return realsize;
-		} else {
-			free(_this->header_data.buffer);
-			_this->header_data.buffer = NULL;
-			return 0; //abort
-		}
-	} else return 0;
+	if(_this->header_data.size == foobar) //incase this function is called when realsize = 0
+		return 0;
+	u8* foo = (u8*)realloc(_this->header_data.buffer, foobar);
+	if(!foo) {
+		free(_this->header_data.buffer);
+		_this->header_data.buffer = NULL;
+		return 0; //abort
+	}
+	_this->header_data.buffer = foo;
+	memcpy((void*)(&((char*)_this->header_data.buffer)[_this->header_data.size]), ptr, realsize);
+	_this->header_data.size = foobar;
+	return realsize;
 }
 
 DownloadManager::Downloader::Downloader(DownloadManager& data) : outpath(NULL), curl_handle(NULL), chunk(NULL), progress({}), buffer_data({}), header_data({}), res((CURLcode)~CURLE_OK) {
