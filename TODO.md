@@ -9,4 +9,5 @@ TODO
 - ~~Provide a fabricated CETK for content where we used an unique ticket instead of signed for all ticket to make output cias installable.~~
 - Allow user to specify where they want downloads to go.
 - Remove exception reliability to determine what failed. Replace with errno or magic numbers instead.
+- Code in warning messages internally about content access and tickets.
 - Other stuff later.
