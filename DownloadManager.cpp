@@ -1,4 +1,8 @@
 #undef LIBCURL_VERSION_NUM //imma try to ensure there's no cheating builds with at commandline definitions.
+#define _DEFAULT_SOURCE
+#ifndef _FILE_OFFSET_BITS
+#define _FILE_OFFSET_BITS 64
+#endif
 #include <cstdio>
 #include <cstdlib>
 #include <cstdarg>
@@ -15,7 +19,10 @@
 #error "Supporting at minimum version libcurl 7.55.0"
 #endif
 
-int DownloadManager::Downloader::xferinfo(void *p, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow) noexcept {
+static std::recursive_mutex global_proxy_lock;
+static const char* global_proxy = NULL;
+
+int DownloadManager::Downloader::xferinfo(void *p, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow) {
 	UNUSED(ultotal); UNUSED(ulnow); //build warning suppression
 	struct progress_data *progress = (struct progress_data*)p;
 	if((dlnow - progress->last_print_value >= 20480 || dlnow == dltotal) && progress->last_print_value != dlnow ) {
@@ -27,13 +34,15 @@ int DownloadManager::Downloader::xferinfo(void *p, curl_off_t dltotal, curl_off_
 	return 0;
 }
 
-size_t DownloadManager::Downloader::write_data(void *ptr, size_t size, size_t nmemb, void *data) noexcept {
+size_t DownloadManager::Downloader::write_data(void *ptr, size_t size, size_t nmemb, void *data) {
 	Downloader* _this = (Downloader*)data;
+	size_t realsize = size*nmemb;
+	u64 totalsize = _this->downloaded + realsize;
+	if(_this->limiteddownload && totalsize > _this->downloadlimit) return 0; // set limited reached
+	_this->downloaded = totalsize;
 	if(_this->bufferflag) {
-		size_t realsize = size*nmemb;
-		size_t foobar = _this->buffer_data.size + realsize;
-		if(_this->buffer_data.size != foobar){ //incase this function is called when realsize = 0
-			u8* foo = (u8*)realloc(_this->buffer_data.buffer, foobar);
+		if(_this->buffer_data.size != totalsize){ //incase this function is called when realsize = 0
+			u8* foo = (u8*)realloc(_this->buffer_data.buffer, totalsize);
 			if(!foo) {
 				free(_this->buffer_data.buffer);
 				_this->buffer_data.buffer = NULL;
@@ -41,7 +50,7 @@ size_t DownloadManager::Downloader::write_data(void *ptr, size_t size, size_t nm
 			}
 			_this->buffer_data.buffer = foo;
 			memcpy((void*)(&((char*)_this->buffer_data.buffer)[_this->buffer_data.size]), ptr, realsize);
-			_this->buffer_data.size = foobar;
+			_this->buffer_data.size = totalsize;
 			if(!_this->out) return realsize; //if no file, return now, to continue with download to buffer
 		}
 	}
@@ -51,13 +60,13 @@ size_t DownloadManager::Downloader::write_data(void *ptr, size_t size, size_t nm
 	return 0; //this shouldn't happen?? but to suppress warnings and to be sure..
 }
 
-size_t DownloadManager::Downloader::headerprint(void *ptr, size_t size, size_t nmemb, void *data) noexcept {
+size_t DownloadManager::Downloader::headerprint(void *ptr, size_t size, size_t nmemb, void *data) {
 	Downloader* _this = (Downloader*)data;
 	size_t realsize = size*nmemb;
-	size_t foobar = _this->header_data.size + realsize;
-	if(_this->header_data.size == foobar) //incase this function is called when realsize = 0
+	size_t totalsize = _this->header_data.size + realsize;
+	if(_this->header_data.size == totalsize) //incase this function is called when realsize = 0
 		return 0;
-	u8* foo = (u8*)realloc(_this->header_data.buffer, foobar);
+	u8* foo = (u8*)realloc(_this->header_data.buffer, totalsize);
 	if(!foo) {
 		free(_this->header_data.buffer);
 		_this->header_data.buffer = NULL;
@@ -65,11 +74,28 @@ size_t DownloadManager::Downloader::headerprint(void *ptr, size_t size, size_t n
 	}
 	_this->header_data.buffer = foo;
 	memcpy((void*)(&((char*)_this->header_data.buffer)[_this->header_data.size]), ptr, realsize);
-	_this->header_data.size = foobar;
+	_this->header_data.size = totalsize;
 	return realsize;
 }
 
-DownloadManager::Downloader::Downloader(DownloadManager& data) : outpath(NULL), curl_handle(NULL), chunk(NULL), progress({}), buffer_data({}), header_data({}), res((CURLcode)~CURLE_OK) {
+DownloadManager::Downloader::Downloader() :
+  out(NULL),
+  outpath(NULL),
+  curl_handle(NULL),
+  function(NULL),
+  chunk(NULL),
+  progress({}),
+  buffer_data({}),
+  header_data({}),
+  res((CURLcode)~CURLE_OK),
+  downloaded(0LLU),
+  downloadlimit(0LLU),
+  bufferflag(false),
+  printheaders(false),
+  limiteddownload(false)
+{}
+
+DownloadManager::Downloader::Downloader(DownloadManager& data) : Downloader() {
 	data.lock();
 	outpath = data.outpath;
 	FILE* out = !outpath ? NULL : fopen(outpath, "wb");
@@ -100,6 +126,8 @@ DownloadManager::Downloader::Downloader(DownloadManager& data) : outpath(NULL), 
 	progress.filename = data.filename;
 	progress.extradata = data.extraprogressdata;
 	bool immediate = data.immediate;
+	downloadlimit = data.downloadlimit;
+	limiteddownload = data.limiteddownload;
 
 	data.outpath = data.filename = NULL;
 	data.extraprogressdata = NULL;
@@ -122,7 +150,7 @@ DownloadManager::Downloader::Downloader(DownloadManager& data) : outpath(NULL), 
 	if(immediate) Download();
 }
 
-DownloadManager::Downloader::~Downloader() noexcept {
+DownloadManager::Downloader::~Downloader() {
 	free((void*)progress.filename);
 	free(outpath);
 	free(buffer_data.buffer);
@@ -130,7 +158,8 @@ DownloadManager::Downloader::~Downloader() noexcept {
 	curl_slist_free_all(chunk);
 }
 
-u64 DownloadManager::Downloader::Download() noexcept {
+u64 DownloadManager::Downloader::Download() {
+	downloaded = 0LLU;
 	out = !outpath ? NULL : fopen(outpath, "wb");
 	if(outpath && !out) {
 		return 0;
@@ -177,8 +206,56 @@ u64 DownloadManager::Downloader::Download() noexcept {
 	return (u64)dl;
 }
 
-DownloadManager& DownloadManager::SetAttribute(DownloadManager::Strtype type, const char* str, ...) noexcept {
+DownloadManager::Downloader& DownloadManager::Downloader::operator=(Downloader&& other) {
+	if(this != &other) {
+		this->~Downloader();
+		out = other.out;
+		other.out = NULL;
+		outpath = other.outpath;
+		other.outpath = NULL;
+		curl_handle = other.curl_handle;
+		other.curl_handle = NULL;
+		chunk = other.chunk;
+		other.chunk = NULL;
+		function = other.function;
+		other.function = NULL;
+		progress.filename = other.progress.filename;
+		progress.last_print_value = other.progress.last_print_value;
+		progress.extradata = other.progress.extradata;
+		other.progress = {NULL, 0, NULL};
+		buffer_data.buffer = other.buffer_data.buffer;
+		buffer_data.size = other.buffer_data.size;
+		other.buffer_data = {NULL, 0};
+		header_data.buffer = other.header_data.buffer;
+		header_data.size = other.header_data.size;
+		other.header_data = {NULL, 0};
+		res = other.res;
+		other.res = (CURLcode)~CURLE_OK;
+		downloaded = other.downloaded;
+		downloadlimit = other.downloadlimit;
+		other.downloaded = other.downloadlimit = 0LLU;
+		bufferflag = other.bufferflag;
+		printheaders = other.printheaders;
+		limiteddownload = other.limiteddownload;
+		other.bufferflag = other.printheaders = other.limiteddownload = false;
+
+		curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, write_data);
+		curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, this);
+
+		if(printheaders) {
+			curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, headerprint);
+			curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, this);
+		}
+
+		curl_easy_setopt(curl_handle, CURLOPT_XFERINFOFUNCTION, function);
+		curl_easy_setopt(curl_handle, CURLOPT_XFERINFODATA, &this->progress);
+	}
+	return *this;
+}
+
+DownloadManager& DownloadManager::SetAttribute(DownloadManager::Strtype type, const char* str, ...) {
 	lock();
+	if(!str) str = "";
 	va_list vaorig, vacopy;
 	va_start(vaorig, str);
 	do {
@@ -228,7 +305,7 @@ DownloadManager& DownloadManager::SetAttribute(DownloadManager::Strtype type, co
 	return *this;
 }
 
-DownloadManager& DownloadManager::SetAttribute(DownloadManager::Flagtype type, bool flag) noexcept {
+DownloadManager& DownloadManager::SetAttribute(DownloadManager::Flagtype type, bool flag) {
 	lock();
 	switch(type) {
 	case BUFFER:
@@ -248,21 +325,47 @@ DownloadManager& DownloadManager::SetAttribute(DownloadManager::Flagtype type, b
 	return *this;
 }
 
-DownloadManager& DownloadManager::SetAttribute(DownloadManager::progress_func function) noexcept {
+DownloadManager& DownloadManager::SetAttribute(DownloadManager::progress_func function) {
 	lock();
 	this->function = function;
 	unlock();
 	return *this;
 }
 
-DownloadManager& DownloadManager::SetAttribute(void* extra) noexcept {
+DownloadManager& DownloadManager::SetAttribute(void* extra) {
 	lock();
 	this->extraprogressdata = extra;
 	unlock();
 	return *this;
 }
 
-DownloadManager::DownloadManager() : filename(NULL), outpath(NULL), chunk(NULL), function(NULL), extraprogressdata(NULL), bufferflag(false), printheaders(false), immediate(false) {
+DownloadManager& DownloadManager::SetDownloadLimit(u64 limit) {
+	lock();
+	this->downloadlimit = limit;
+	this->limiteddownload = true;
+	unlock();
+	return *this;
+}
+
+DownloadManager& DownloadManager::RemoveDownloadLimit() {
+	lock();
+	this->limiteddownload = false;
+	unlock();
+	return *this;
+}
+
+DownloadManager& DownloadManager::UseGlobalProxy() {
+	global_proxy_lock.lock();
+	if(!global_proxy) {
+		global_proxy_lock.unlock();
+		return *this;
+	}
+	this->SetAttribute(DownloadManager::PROXY, global_proxy);
+	global_proxy_lock.unlock();
+	return *this;
+}
+
+DownloadManager::DownloadManager() : filename(NULL), outpath(NULL), chunk(NULL), function(NULL), extraprogressdata(NULL), bufferflag(false), printheaders(false), immediate(false), limiteddownload(false) {
 	if(InitLib() != CURLE_OK) throw std::runtime_error("Couldn't init libcurl or an instance of it.");
 	#ifndef CURL_STATICLIB
 	static bool versionchecked = false;
@@ -284,14 +387,14 @@ DownloadManager::DownloadManager() : filename(NULL), outpath(NULL), chunk(NULL),
 	curl_easy_setopt(curl_handle, CURLOPT_URL, "https://example.com"); //to not be blank setting
 }
 
-DownloadManager::~DownloadManager() noexcept {
+DownloadManager::~DownloadManager() {
 	free(filename);
 	free(outpath);
 	curl_easy_cleanup(curl_handle);
 	curl_slist_free_all(chunk);
 }
 
-CURLcode DownloadManager::InitLib() noexcept {
+CURLcode DownloadManager::InitLib() {
 	static std::recursive_mutex lock;
 	lock.lock();
 	static int init = 0;
@@ -307,7 +410,7 @@ CURLcode DownloadManager::InitLib() noexcept {
 
 //slightly changed copy of Curl_slist_duplicate from libcurl code, since libcurl doesn't provide me one on normal lib usage, as of this writing
 //correct me if wrong
-struct curl_slist* DownloadManager::SlistClone() noexcept {
+struct curl_slist* DownloadManager::SlistClone() {
 	struct curl_slist *outlist = NULL;
 	struct curl_slist *tmp;
 	struct curl_slist *inlist = chunk;
@@ -322,4 +425,17 @@ struct curl_slist* DownloadManager::SlistClone() noexcept {
 		inlist = inlist->next;
 	}
 	return outlist;
+}
+
+void DownloadManager::SetGlobalProxy(const char* proxy) {
+	const char* tmp = NULL;
+	if(proxy) {
+		tmp = malloc(strlen(proxy)+1);
+		if(!tmp) throw std::bad_alloc();
+		strcpy(tmp, proxy);
+	}
+	global_proxy_lock.lock();
+	free(global_proxy);
+	global_proxy = tmp;
+	global_proxy_lock.unlock();
 }

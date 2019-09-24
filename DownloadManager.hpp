@@ -1,7 +1,6 @@
 #ifndef __DOWNLOADMANAGER_HPP__
 #define __DOWNLOADMANAGER_HPP__
 #include <curl/curl.h>
-#include <exception>
 #include <mutex>
 #include "types.h"
 
@@ -29,9 +28,11 @@ protected:
 	CURL* curl_handle;
 	progress_func function;
 	void* extraprogressdata;
+	u64 downloadlimit;
 	bool bufferflag;
 	bool printheaders;
 	bool immediate;
+	bool limiteddownload;
 public:
 	class Downloader {
 	public:
@@ -56,41 +57,56 @@ public:
 			size_t size;
 		} header_data;
 		CURLcode res;
+		u64 downloaded;
+		u64 downloadlimit;
 		bool bufferflag;
 		bool printheaders;
-		static int xferinfo(void *p, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow) noexcept;
-		static int older_progress(void *p, double dltotal, double dlnow, double ultotal, double ulnow) noexcept;
-		static size_t write_data(void *ptr, size_t size, size_t nmemb, void *data) noexcept;
-		static size_t headerprint(void *ptr, size_t size, size_t nmemb, void *data) noexcept;
-		explicit Downloader(DownloadManager& data);
+		bool limiteddownload;
+		static int xferinfo(void *p, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow);
+		static size_t write_data(void *ptr, size_t size, size_t nmemb, void *data);
+		static size_t headerprint(void *ptr, size_t size, size_t nmemb, void *data);
+		Downloader& operator=(const Downloader& other) {return *this;}
 	public:
-		~Downloader() noexcept;
-		u64 Download() noexcept;
-		void* GetBufferAndDetach(size_t& length) noexcept {
+		Downloader& operator=(Downloader&& other);
+	private:
+		explicit Downloader();
+		explicit Downloader(DownloadManager& data);
+		Downloader(const Downloader& other);
+	public:
+		Downloader(Downloader&& other) : Downloader() {*this = other;}
+		~Downloader();
+
+		u64 Download();
+		void* GetBufferAndDetach(size_t& length) {
 			void* ptr = buffer_data.buffer;
 			buffer_data.buffer = NULL;
 			length = buffer_data.size;
 			buffer_data.size = 0;
 			return ptr;
 		}
-		bool WasLastAttemptSuccess() noexcept {
+		bool WasLastAttemptSuccess() {
 			return res == CURLE_OK;
 		}
 		friend class DownloadManager;
 	};
-	DownloadManager& SetAttribute(Strtype type, const char* str, ...) noexcept;
-	DownloadManager& SetAttribute(Flagtype type, bool flag) noexcept;
-	DownloadManager& SetAttribute(progress_func function) noexcept;
-	DownloadManager& SetAttribute(void* extra) noexcept;
+	DownloadManager& SetAttribute(Strtype type, const char* str, ...);
+	DownloadManager& SetAttribute(Flagtype type, bool flag);
+	DownloadManager& SetAttribute(progress_func function);
+	DownloadManager& SetAttribute(void* extra);
+	DownloadManager& SetDownloadLimit(u64 limit);
+	DownloadManager& RemoveDownloadLimit();
+	DownloadManager& UseGlobalProxy();
 	Downloader GetDownloader() {
 		return Downloader(*this);
 	}
 	DownloadManager();
-	~DownloadManager() noexcept;
+	~DownloadManager();
 protected:
-	static CURLcode InitLib() noexcept;
-	struct curl_slist* SlistClone() noexcept;
+	static CURLcode InitLib();
+	struct curl_slist* SlistClone();
 	friend class Downloader;
+public:
+	static void SetGlobalProxy(const char* proxy);
 };
 
 #endif
