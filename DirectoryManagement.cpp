@@ -107,7 +107,6 @@ int Utils::DirectoryManagement::RemoveDirectory(const char* path, bool recursive
 	}
 	int ret = 0;
 	char* fixedpath = NULL;
-	char* tmp = NULL;
 	if((ret = FixUpPath(fixedpath, path, false)) != 0) return errno;
 	struct stat buffer;
 	if(lstat(fixedpath, &buffer) != 0) return errno;
