@@ -2,8 +2,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <errno.h>
-#include "SharedStorage.hpp"
+#include <openssl/rand.h>
+#include "StorageControl.hpp"
 #include "DirectoryManagement.hpp"
+#include "types.h"
 
 #if defined _WIN16 || defined _WIN32 || defined _WIN64
 #define HOME "USERPROFILE"
@@ -17,7 +19,7 @@ namespace {
 	struct storage {
 		const char* const path;
 		const char* const env;
-		int getfullpath(char*& fullpath) const noexcept {
+		int getfullpath(char*& fullpath) const {
 			const char* foo = getenv(env);
 			if(!foo) {
 				errno = EADDRNOTAVAIL;
@@ -33,7 +35,7 @@ namespace {
 			errno = 0;
 			return errno;
 		}
-		int checkpath() const noexcept {
+		int checkpath() const {
 			char* fullpath = NULL;
 			int err = 0;
 			if((err = getfullpath(fullpath)) != 0) {
@@ -45,7 +47,7 @@ namespace {
 			errno = err;
 			return errno;
 		}
-		int createpath() const noexcept {
+		int createpath() const {
 			char* fullpath = NULL;
 			int err = 0;
 			if((err = getfullpath(fullpath)) != 0) {
@@ -71,7 +73,7 @@ namespace {
 	};
 }
 
-int NintendoData::SharedStorage::Load(FILE*& out, const char* file) noexcept {
+int NintendoData::SharedStorage::Load(FILE*& out, const char* file) {
 	if(!file) {
 		errno = EFAULT;
 		return errno;
@@ -121,7 +123,7 @@ int NintendoData::SharedStorage::Load(FILE*& out, const char* file) noexcept {
 	return errno;
 }
 
-int NintendoData::SharedStorage::Save(const void* in, size_t inlen, const char* file) noexcept {
+int NintendoData::SharedStorage::Save(const void* in, size_t inlen, const char* file) {
 	if(!file || (!in && inlen)) {
 		errno = EFAULT;
 		return errno;
@@ -229,4 +231,50 @@ int NintendoData::SharedStorage::Save(const void* in, size_t inlen, const char* 
 	free(fullpath);
 	errno = 0;
 	return errno;
+}
+
+NintendoData::TemporaryStorage::TemporaryStorage() {
+	int i;
+	int numofstorages = sizeof(storages) / sizeof(struct storage);
+	for(i = 0; i < numofstorages; i++)
+		if(storages[i].checkpath() == 0) break;
+	//failed, no storages.
+	if(i >= numofstorages) {
+		for(i = 0; i < numofstorages; i++)
+			if(storages[i].createpath() == 0) break;
+		//failed, again?
+		if(i >= numofstorages)
+			throw std::runtime_error("No Storage.");
+	}
+	u8 random[16];
+	RAND_bytes(random, 16);
+	char strrandom[33];
+	strrandom[32] = 0;
+	static const char* const HexString = "0123456789ABCDEF";
+	for(int j = 0; j < 16; j++) {
+		strrandom[j*2] = HexString[random[j]&0xF];
+		strrandom[j*2+1] = HexString[(random[j]>>4)&0xF];
+	}
+	char* storagepath = NULL;
+	if(storages[i].getfullpath(storagepath) != 0)
+		throw std::runtime_error("No Storage.");
+	char* tmpstorage = (char*)malloc(strlen(storagepath)+45);
+	if(!tmpstorage) {
+		free(storagepath);
+		throw std::bad_alloc();
+	}
+	sprintf(tmpstorage, "%s/TmpStorage/%s", storagepath, strrandom);
+	free(storagepath);
+	if(Utils::DirectoryManagement::FixUpPath(this->ContainerPath, tmpstorage)) {
+		free(tmpstorage);
+		free(this->ContainerPath);
+		throw std::bad_alloc();
+	}
+	free(tmpstorage);
+}
+
+NintendoData::TemporaryStorage::~TemporaryStorage() {
+	if(this->ContainerPath) Utils::DirectoryManagement::RemoveDirectory(this->ContainerPath);
+	free(this->ContainerPath);
+	this->ContainerPath = nullptr;
 }

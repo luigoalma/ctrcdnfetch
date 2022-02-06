@@ -140,6 +140,10 @@ void IOHelper::MemoryIO::Rewind() {
 	position = 0;
 }
 
+s64 IOHelper::MemoryIO::Size() {
+	return size;
+}
+
 IOHelper::MemoryIO::MemoryIO(void* in, s64 length) : ptr(in), size(length), position(0) {
 	if(!in) throw std::invalid_argument("Null pointer.");
 	if(length < 0) throw std::invalid_argument("Negative length."); 

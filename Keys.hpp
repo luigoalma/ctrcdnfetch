@@ -12,23 +12,23 @@ namespace NintendoData {
 			bool ReloadStorage();
 			u8* GetKey(u8* outkey, int keyslot, KeyType type = KeyX, bool retail = true);
 			u8* GetCommonKey(u8* outkey, int index, bool retail = true);
-			u8* GetKeyX(u8* outkey, int keyslot, bool retail = true) {return GetKey(outkey, keyslot, KeyX, retail);}
-			u8* GetKeyY(u8* outkey, int keyslot, bool retail = true) {return GetKey(outkey, keyslot, KeyY, retail);}
-			u8* GetKeyNormal(u8* outkey, int keyslot, bool retail = true) {return GetKey(outkey, keyslot, KeyNormal, retail);}
+			inline static u8* GetKeyX(u8* outkey, int keyslot, bool retail = true) {return GetKey(outkey, keyslot, KeyX, retail);}
+			inline static u8* GetKeyY(u8* outkey, int keyslot, bool retail = true) {return GetKey(outkey, keyslot, KeyY, retail);}
+			inline static u8* GetKeyNormal(u8* outkey, int keyslot, bool retail = true) {return GetKey(outkey, keyslot, KeyNormal, retail);}
 		}
 		bool TWLScrambler(u8* outnormal, const u8* KeyX, const u8* KeyY);
 		bool CTRScrambler(u8* outnormal, const u8* KeyX, const u8* KeyY);
-		bool Scrambler(u8* outnormal, int keyslotX, const u8* keyY, bool retail = true) {
+		inline static bool Scrambler(u8* outnormal, int keyslotX, const u8* keyY, bool retail = true) {
 			u8 key[16];
 			if(keyslotX < 4) return TWLScrambler(outnormal, Storage::GetKeyX(key, keyslotX, retail), keyY);
 			else return CTRScrambler(outnormal, Storage::GetKeyX(key, keyslotX, retail), keyY);
 		}
-		bool Scrambler(u8* outnormal, const u8* keyX, int keyslotY, bool retail = true) {
+		inline static bool Scrambler(u8* outnormal, const u8* keyX, int keyslotY, bool retail = true) {
 			u8 key[16];
 			if(keyslotY < 4) return TWLScrambler(outnormal, keyX, Storage::GetKeyY(key, keyslotY, retail));
 			else return CTRScrambler(outnormal, keyX, Storage::GetKeyY(key, keyslotY, retail));
 		}
-		bool ScrambleCommon(u8* outnormal, int index, bool retail = true) {
+		inline static bool ScrambleCommon(u8* outnormal, int index, bool retail = true) {
 			u8 keys[2][16];
 			return CTRScrambler(outnormal, Storage::GetKeyX(keys[0], 0x3D, retail), Storage::GetCommonKey(keys[1], index, retail));
 		}

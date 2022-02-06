@@ -11,7 +11,7 @@
 #include <openssl/sha.h>
 #include <openssl/bn.h>
 #include <openssl/evp.h>
-#include "SharedStorage.hpp"
+#include "StorageControl.hpp"
 #include "Keys.hpp"
 #include "Endian.hpp"
 
@@ -618,7 +618,6 @@ bool NintendoData::KeyUtils::TWLScrambler(u8* outnormal, const u8* keyX, const u
 	}
 	bool success = false;
 	do {
-		if(!workkey1 || !workkey2) break;
 		if(!BN_add(workkey1, workkey1, workkey2)) break;
 		if(BN_num_bits(workkey1) > 128)
 			BN_mask_bits(workkey1, 128);
@@ -645,7 +644,6 @@ bool NintendoData::KeyUtils::CTRScrambler(u8* outnormal, const u8* keyX, const u
 	}
 	bool success = false;
 	do {
-		if(!workkey1 || !workkey2) break;
 		if(!BN_lshift(workkey2, workkey1, 2)) break;
 		if(BN_num_bits(workkey2) > 128)
 			BN_mask_bits(workkey2, 128);
@@ -847,10 +845,12 @@ NintendoData::AESEngine& NintendoData::AESEngine::SetKey(NintendoData::KeyUtils:
 }
 
 NintendoData::AESEngine& NintendoData::AESEngine::SetCommon(int commonindex) {
-	if(commonindex < 0 || commonindex > 5)
-		throw std::invalid_argument("AESEngine invalid common index.");
-	if(!KeyUtils::Storage::ReloadStorage())
+	if(commonindex >= 0 && commonindex < 6 && !KeyUtils::Storage::ReloadStorage())
 		throw std::runtime_error("AESEngine couldn't get common key.");
+	if(commonindex < 0 && commonindex >= 6) {
+		memset((*keyslots)[2][0x3D], 0, sizeof((*keyslots)[2][0x3D]));
+		return *this;
+	}
 	u8* key = KeyUtils::Storage::GetCommonKey((*keyslots)[1][0x3D], commonindex, retail);
 	if(!key)
 		throw std::runtime_error("AESEngine couldn't get common key.");

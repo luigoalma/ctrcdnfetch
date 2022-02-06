@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <memory>
 #include <stdexcept>
 #include <new>
 #include "Endian.hpp"
@@ -11,7 +12,7 @@
 namespace NintendoData {
 	class Ticket {
 	public:
-		enum SignatureType : u32 {
+		enum class SignatureType : u32 {
 			RSA_4096_SHA1 = 0x10000,
 			RSA_2048_SHA1,
 			ECDSA_SHA1,
@@ -19,7 +20,8 @@ namespace NintendoData {
 			RSA_2048_SHA256,
 			ECDSA_SHA256
 		};
-		struct __attribute__((__packed__)) Header {
+		#pragma pack(push,1)
+		struct Header {
 			char Issuer[64];
 			u8 ECC_PubKey[0x3C];
 			u8 Version;
@@ -41,45 +43,56 @@ namespace NintendoData {
 			u8 Audit;
 			u8 Reserved6[0x42];
 			u8 Limits[0x40];
-			u8 ContentIndex[0xAC];
-			u64 GetTicketID() const noexcept {return Endian::Be(TicketID);}
-			u32 GetConsoleID() const noexcept {return Endian::Be(ConsoleID);}
-			u64 GetTitleID() const noexcept {return Endian::Be(TitleID);}
-			u16 GetTicketTitleVersion() const noexcept {return Endian::Be(TicketTitleVersion);}
-			u32 GeteShopID() const noexcept {return Endian::Be(eShopID);}
+			u8 ContentIndex[];
+			u64 GetTicketID() const {return Endian::Be(TicketID);}
+			u32 GetConsoleID() const {return Endian::Be(ConsoleID);}
+			u64 GetTitleID() const {return Endian::Be(TitleID);}
+			u16 GetTicketTitleVersion() const {return Endian::Be(TicketTitleVersion);}
+			u32 GeteShopID() const {return Endian::Be(eShopID);}
+			u32 ContentIndexSize() const {return Endian::Be((u32*)&ContentIndex[4]);}
+			u32 HeaderFullSize() const {return sizeof(Header) + ContentIndexSize();}
 		};
+		struct TicketRightsField {
+		    u8 Unk[2];
+		    u16 IndexOffset;
+		    u8 RightsBitfield[0x80];
+		};
+		#pragma pack(pop)
 	private:
 		u8* rawticket;
 		struct Header* header;
+		u32 rightfieldcount;
+		const struct TicketRightsField* rights;
 	public:
-		Ticket& operator=(const Ticket& other) {
-			if(this != &other) {
-				size_t ticketlen = ((uptr)other.header - (uptr)other.rawticket) + sizeof(struct Header);
-				u8* tmp = (u8*)calloc(ticketlen, 1);
-				if(!tmp) throw std::bad_alloc();
-				free(this->rawticket);
-				this->rawticket = tmp;
-				memcpy(this->rawticket, other.rawticket, ticketlen);
-				this->header = (struct Header*)&this->rawticket[(uptr)other.header - (uptr)other.rawticket];
-			}
-			return *this;
-		}
+		Ticket& operator=(const Ticket& other);
+		Ticket& operator=(Ticket&& other);
 		void GetWrappedTicket(char*& out_b64_encticket, char*& out_b64_encticketkey) const;
-		const struct Header &GetHeader() const noexcept {return *header;}
-		u64 TicketID() const noexcept {return GetHeader().GetTicketID();}
-		u32 ConsoleID() const noexcept {return GetHeader().GetConsoleID();}
-		u64 TitleID() const noexcept {return GetHeader().GetTitleID();}
-		u16 GetTicketTitleVersion() const noexcept {return GetHeader().GetTicketTitleVersion();}
-		u32 eShopID() const noexcept {return GetHeader().GeteShopID();}
+		const struct Header &GetHeader() const {return *header;}
+		u64 TicketID() const {return GetHeader().GetTicketID();}
+		u32 ConsoleID() const {return GetHeader().GetConsoleID();}
+		u64 TitleID() const {return GetHeader().GetTitleID();}
+		u16 GetTicketTitleVersion() const {return GetHeader().GetTicketTitleVersion();}
+		u32 eShopID() const {return GetHeader().GeteShopID();}
 		bool VerifySign() const;
-		size_t TotalSize() const noexcept {return ((uptr)header - (uptr)rawticket) + sizeof(struct Header);}
-		Ticket(const Ticket& other, bool mustbesigned = false) : rawticket(NULL) {
-			if(mustbesigned ? !other.VerifySign() : false)
+		size_t TotalSize() const {return ((uptr)header - (uptr)rawticket) + header->HeaderFullSize();}
+		bool RightsToContentIndex(int index) const;
+		void StripPersonalization();
+		static size_t MostCommonTicketSize() {return 0x350u;};
+		static size_t MinimumNoSignSize() {return sizeof(Header) + 20;};
+		static size_t MinimumMaxSignSize() {return 0x240 + MinimumNoSignSize();};
+		static size_t MinimumMinSignSize() {return 0x80 + MinimumNoSignSize();};
+		static size_t GetSignSize(const void* ptr, size_t ptrlen);
+		static size_t GetTotalSize(const void* ptr, size_t ptrlen);
+		const void* GetRaw() const {return rawticket;}
+		Ticket();
+		Ticket(const Ticket& other, bool mustbesigned = false) : Ticket() {
+			if(mustbesigned && !other.VerifySign())
 				throw std::invalid_argument("Ticket is not properly signed.");
 			*this = other;
 		}
+		Ticket(Ticket&& other) : Ticket() {*this = other;}
 		Ticket(const void* ptr, size_t ptrlen, bool mustbesigned = false);
-		~Ticket() noexcept;
+		~Ticket();
 	};
 }
 #endif
