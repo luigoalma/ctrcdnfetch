@@ -150,18 +150,21 @@ void NintendoData::Ticket::GetWrappedTicket(char*& out_b64_encticket, char*& out
 	u8 key[16] = {0};
 	u8 iv[16] = {0};
 	size_t ticketlen = TotalSize();
-	std::unique_ptr<u8[]> encticket(new u8[ticketlen]);
+	size_t ticketpaddedlen = (ticketlen + 15) & ~0xF;
+	std::unique_ptr<u8[]> encticket(new u8[ticketpaddedlen]);
 	std::unique_ptr<u8[]> enckeyiv(new u8[256]);
 	out_b64_encticket = NULL;
 	out_b64_encticketkey = NULL;
+	memcpy(encticket.get(), rawticket, ticketlen);
+	memset(&encticket.get()[ticketlen], 0, ticketpaddedlen - ticketlen);
 	try {
 		RAND_bytes(key, 16);
 		RAND_bytes(iv, 16);
-		if(!TicketEncrypt(rawticket, ticketlen, encticket.get(), key, iv))
+		if(!TicketEncrypt(rawticket, ticketpaddedlen, encticket.get(), key, iv))
 			throw std::runtime_error("Error on encryption of ticket.");
 		if(!KeyEncrypt(enckeyiv.get(), key, iv))
 			throw std::runtime_error("Error on encryption of key and iv.");
-		Base64::Encode(encticket.get(), ticketlen, out_b64_encticket);
+		Base64::Encode(encticket.get(), ticketpaddedlen, out_b64_encticket);
 		Base64::Encode(enckeyiv.get(), 256, out_b64_encticketkey);
 	} catch(...) { //ensure clean up ...
 		free(out_b64_encticket);
